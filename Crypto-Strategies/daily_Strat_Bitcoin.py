@@ -65,6 +65,15 @@ for yr in [2017,2018]:
     mpf.plot(df[df['year']==yr][['Open','High','Low','Close']].iloc[:125],type='candle',mav=(9,50),title=f'Bitcoin Candlestick chart {yr} first half')
     #plt.title(f' Bitcoin price chart : {yr} : Big bull year')
     plt.show()
+    
+#%% Get plots for analysis
+for i in range(0,df.shape[0],50):
+    #plt.figure(figsize=(14,9))
+    mpf.plot(df[['Open','High','Low','Close']].iloc[i:i+100],type='candle',figratio=(20,10),mav=(9,50),title=f'Bitcoin Candlestick chart {df.index.values[i]} - {df.index.values[i+100]}',savefig=f'C:\\Users\\Pavankumar\\Desktop\\bitcoin_plots\\{i}.png')
+    #plt.title(f' Bitcoin price chart : {yr} : Big bull year')
+    #plt.savefig()
+    plt.show()    
+
 #%%
 # Let's implement a simple Momentum Strategy where we go long if last x days return is positive and short otherwise 
 for mom_per in [5,20,50]:
@@ -72,6 +81,11 @@ for mom_per in [5,20,50]:
     df[f'sig_mom{mom_per}']=np.sign(df[f'{mom_per}d_ret'])
     df[f'pnl_mom{mom_per}']=df[f'sig_mom{mom_per}'].values*df['fret'].values
     print (f'sharpe of {mom_per} day momentum strategy is ',np.sqrt(252)*df[f'pnl_mom{mom_per}'].mean()/df[f'pnl_mom{mom_per}'].std())
+
+#%%
+# Let's see the data separation caused by 5 dma
+sns.distplot(df[df['5d_ret']>0]['fret'],color='g')    
+sns.distplot(df[df['5d_ret']<0]['fret'],color='g')
 #%% # Let's now implement a moving average strategy: 
 # where if faster moving average above slower moving average we go long otherwise short 
 
@@ -93,13 +107,10 @@ pnl_cols=[x for x in df.columns if x[:3]=='pnl']
 df['tot_pnl']=df[pnl_cols].mean(axis=1)
 print (np.sqrt(252)*df['tot_pnl'].mean()/df['tot_pnl'].std())
 
-#%%
-print (pnl_cols)
+#%% Let's do some Portfolio Construction
 mean_daily_returns=df[pnl_cols].mean()
 cov_matrix = df[pnl_cols].cov()
-print (mean_daily_returns)
-print (cov_matrix)
-#%%
+
 n_sims=5000
 results = np.zeros((3,n_sims))
 best_weights=np.zeros(7)
@@ -135,7 +146,56 @@ plt.colorbar()
 print (' The max sharpe we can achieve with ideal weights is ',max_shrp)
 print ( list(zip(pnl_cols,best_weights)))
 #%%
-
-#%%
 df['strat1_sig_open']=np.where(df['1d_ret']>0,df['fret'],0)
 print (np.sqrt(252)*df['strat1_sig_open'].mean()/df['strat1_sig_open'].std())
+
+#%%
+print (df.head(2))
+print (df.tail(2) )
+print (df.shape[0])
+
+#%% Strategy based on S&P 500 
+sp=pd.read_csv('C:\\Users\\Pavankumar\\Desktop\\sp500_yahoo.csv')
+sp['Date']=[int( f'{x[:4]}{x[5:7]}{x[8:10]}') for x in list(sp['Date']) ]
+
+sp['sp_9ma']=np.where(sp['Close']>=sp['Close'].shift(9),1,0)
+sp['sp_20ma']=np.where(sp['Close']>=sp['Close'].shift(20),1,0)
+sp['sp_50ma']=np.where(sp['Close']>=sp['Close'].shift(50),1,0)
+sp['sp_100ma']=np.where(sp['Close']>=sp['Close'].shift(100),1,0)
+#sp['sp_200ma']=np.where(sp['Close']>=sp['Close'].shift(100),1,0)
+sp=sp[(sp['Date']>=20151009)&(sp['Date']<=20200416)]
+
+print (sp[['Date','sp_9ma','sp_20ma','sp_50ma','sp_100ma']].head(10))
+#sp=sp.iloc[100:,:]
+sp['sp_ret']=100*(sp['Open']/sp['Open'].shift(1)-1)
+sp['sp_ret3']=100*(sp['Open']/sp['Open'].shift(3)-1)
+sp['sp_ret5']=100*(sp['Open']/sp['Open'].shift(5)-1)
+sp['sp_ret10']=100*(sp['Open']/sp['Open'].shift(10)-1)
+sp=sp.iloc[10:,:]
+
+print (sp.isnull().sum())
+sp['Date']=pd.to_datetime(sp['Date'],format='%Y%m%d')
+sp.set_index('Date',inplace=True)
+sp=sp.join(df['1d_ret'],how='left')
+sp.rename(columns={'1d_ret':'btc_ret'},inplace=True)
+sp['btc_fret']=sp['btc_ret'].shift(-1)
+sp=sp.iloc[1:-1,:]
+print (sp.head(10))
+print (np.corrcoef(sp['btc_ret'],sp['sp_ret'])[0][1])
+#%%
+print (sp['btc_fret'].mean())
+#%%
+print ( sp[sp['sp_ret']>0]['btc_fret'].mean(),sp[sp['sp_ret']<0]['btc_fret'].mean() )
+print ( sp[sp['sp_ret3']>0]['btc_fret'].mean(),sp[sp['sp_ret3']<0]['btc_fret'].mean() )
+print ( sp[sp['sp_ret5']>0]['btc_fret'].mean(),sp[sp['sp_ret5']<0]['btc_fret'].mean() )
+print ( sp[sp['sp_ret10']>0]['btc_fret'].mean(),sp[sp['sp_ret10']<0]['btc_fret'].mean() )
+
+#%%
+print ( np.sqrt(252)*sp[sp['sp_50ma']==0]['btc_fret'].mean()/sp[sp['sp_50ma']==0]['btc_fret'].std() )
+#%%
+print ( sp[sp['sp_9ma']>0]['btc_fret'].mean(),sp[sp['sp_9ma']==0]['btc_fret'].mean() )
+print ( sp[sp['sp_20ma']>0]['btc_fret'].mean(),sp[sp['sp_20ma']==0]['btc_fret'].mean() )
+print ( sp[sp['sp_50ma']>0]['btc_fret'].mean(),sp[sp['sp_50ma']==0]['btc_fret'].mean() )
+print ( sp[sp['sp_100ma']>0]['btc_fret'].mean(),sp[sp['sp_100ma']==0]['btc_fret'].mean() )
+
+
